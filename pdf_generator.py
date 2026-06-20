@@ -33,37 +33,104 @@ import matplotlib.patches as mpatches
 from matplotlib import rcParams
 
 # ============================================================
-# 字体注册
+# 字体注册（跨平台：Linux / Windows / macOS）
 # ============================================================
 
 def register_fonts():
-    """注册中文字体"""
-    font_paths = [
-        # Windows系统字体
-        r'C:\Windows\Fonts\simhei.ttf',       # 黑体
-        r'C:\Windows\Fonts\simsun.ttc',        # 宋体
-        r'C:\Windows\Fonts\simfang.ttf',       # 仿宋
-        r'C:\Windows\Fonts\msyh.ttc',          # 微软雅黑
-        r'C:\Windows\Fonts\msyhbd.ttc',        # 微软雅黑 Bold
+    """注册中文字体 — 优先使用项目内嵌字体，兼容 Linux/Windows/macOS"""
+    import os
+    _font_ok = False
+
+    # 1. 项目内嵌字体（最高优先级，确保 Linux/Render 可用）
+    embed_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
+    embed_paths = [
+        os.path.join(embed_dir, 'NotoSansSC.ttf'),
+        os.path.join(embed_dir, 'SimHei.ttf'),
+        os.path.join(embed_dir, 'msyh.ttc'),
     ]
-    font_registered = False
-    for path in font_paths:
+    for path in embed_paths:
         if os.path.exists(path):
             try:
                 pdfmetrics.registerFont(TTFont('ChineseFont', path))
-                font_registered = True
+                _font_ok = True
+                print(f"[PDF] 使用内嵌字体: {os.path.basename(path)}")
                 break
-            except Exception:
+            except Exception as e:
+                print(f"[PDF] 内嵌字体加载失败: {path} ({e})")
                 continue
 
-    if not font_registered:
-        # 使用内置字体
-        return 'Helvetica'
+    if not _font_ok:
+        # 2. Windows 系统字体
+        win_paths = [
+            r'C:\Windows\Fonts\msyh.ttc',          # 微软雅黑
+            r'C:\Windows\Fonts\simhei.ttf',         # 黑体
+            r'C:\Windows\Fonts\simsun.ttc',         # 宋体
+            r'C:\Windows\Fonts\msyhbd.ttc',         # 微软雅黑 Bold
+        ]
+        for path in win_paths:
+            if os.path.exists(path):
+                try:
+                    pdfmetrics.registerFont(TTFont('ChineseFont', path))
+                    _font_ok = True
+                    print(f"[PDF] 使用Windows字体: {os.path.basename(path)}")
+                    break
+                except Exception:
+                    continue
 
-    # Matplotlib中文字体设置
-    rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
-    rcParams['axes.unicode_minus'] = False
-    return 'ChineseFont'
+    if not _font_ok:
+        # 3. macOS 系统字体
+        mac_paths = [
+            '/System/Library/Fonts/STHeiti Light.ttc',
+            '/System/Library/Fonts/PingFang.ttc',
+            '/Library/Fonts/Arial Unicode.ttf',
+        ]
+        for path in mac_paths:
+            if os.path.exists(path):
+                try:
+                    pdfmetrics.registerFont(TTFont('ChineseFont', path))
+                    _font_ok = True
+                    print(f"[PDF] 使用macOS字体: {os.path.basename(path)}")
+                    break
+                except Exception:
+                    continue
+
+    if not _font_ok:
+        # 4. Linux 系统字体
+        linux_paths = [
+            '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc',     # 文泉驿微米黑
+            '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
+            '/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf',
+            '/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc',
+        ]
+        for path in linux_paths:
+            if os.path.exists(path):
+                try:
+                    pdfmetrics.registerFont(TTFont('ChineseFont', path))
+                    _font_ok = True
+                    print(f"[PDF] 使用Linux字体: {path}")
+                    break
+                except Exception:
+                    continue
+
+    # 最终检查
+    if _font_ok:
+        # Matplotlib 中文字体设置 — 使用项目内嵌字体路径
+        _embed_font_path = os.path.join(embed_dir, 'NotoSansSC.ttf')
+        if os.path.exists(_embed_font_path):
+            from matplotlib import font_manager as fm
+            fm.fontManager.addfont(_embed_font_path)
+            prop = fm.FontProperties(fname=_embed_font_path)
+            rcParams['font.sans-serif'] = [prop.get_name()] + rcParams.get('font.sans-serif', [])
+            rcParams['font.family'] = 'sans-serif'
+        else:
+            rcParams['font.sans-serif'] = ['Noto Sans SC', 'SimHei', 'Microsoft YaHei', 'WenQuanYi Micro Hei', 'DejaVu Sans']
+        rcParams['axes.unicode_minus'] = False
+        return 'ChineseFont'
+    else:
+        # 无中文字体可用，使用 Helvetica 并警告
+        import warnings
+        warnings.warn("[PDF] 未找到任何中文字体！PDF中文将显示为方块。请在 fonts/ 目录放置 NotoSansSC.ttf", UserWarning)
+        return 'Helvetica'
 
 
 FONT_NAME = register_fonts()

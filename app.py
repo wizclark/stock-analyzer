@@ -26,15 +26,29 @@ app.register_blueprint(auth_bp)
 # 全局股票列表
 STOCK_LIST = []
 
+def normalize_stock_code(code):
+    """标准化股票代码：剥离 sz/sh/bj 前缀，返回纯数字代码"""
+    if not code:
+        return code
+    c = code.strip().lower()
+    for prefix in ('sz', 'sh', 'bj'):
+        if c.startswith(prefix) and len(c) > 2 and c[2:].isdigit():
+            return c[2:]
+    return code.upper()
+
 def load_stock_list():
     global STOCK_LIST
     try:
-        # 优先加载完整列表
         data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'stock_list_full.json')
         if not os.path.exists(data_path):
             data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'stock_list.json')
         with open(data_path, 'r', encoding='utf-8') as f:
-            STOCK_LIST = json.load(f)
+            raw = json.load(f)
+        # 预处理：为每只股票生成纯数字代码
+        STOCK_LIST = []
+        for s in raw:
+            s['code_clean'] = normalize_stock_code(s.get('code', ''))
+            STOCK_LIST.append(s)
         print(f"Loaded {len(STOCK_LIST)} stocks")
     except Exception as e:
         print(f"Stock list load failed: {e}")
@@ -72,45 +86,48 @@ def history_page():
 
 @app.route('/api/search')
 def search_stocks():
-    query = request.args.get('q', '').strip().lower()
+    query = request.args.get('q', '').strip()
     if not query or len(query) < 1:
         return jsonify([])
-    
+
     results = []
+    # 同时用原始大小写和小写匹配
     query_lower = query.lower()
-    
-    # 优化搜索：优先代码精确匹配，然后名称前缀匹配，最后名称包含匹配
+    query_clean = normalize_stock_code(query)
+
     for stock in STOCK_LIST:
         code = stock.get('code', '')
+        code_clean = stock.get('code_clean', '')
         name = stock.get('name', '')
-        
+
         matched = False
-        # 代码精确匹配（优先级最高）
-        if code == query:
+        # 纯数字代码精确/前缀匹配（兼容 sz002222 / 002222）
+        if code_clean == query or code_clean == query_clean:
             matched = True
-        # 代码前缀匹配
-        elif code.startswith(query):
+        elif code.startswith(query.upper()) or code.startswith(query_lower):
+            matched = True
+        elif code_clean.startswith(query_clean) and query_clean.isdigit():
             matched = True
         # 名称精确匹配
-        elif name == query:
+        elif name == query or name.lower() == query_lower:
             matched = True
         # 名称前缀匹配
-        elif name.startswith(query.upper()) or name.lower().startswith(query_lower):
+        elif name.startswith(query) or name.lower().startswith(query_lower):
             matched = True
         # 名称包含匹配
         elif query_lower in name.lower():
             matched = True
-        
+
         if matched:
             results.append({
-                'code': code, 
+                'code': code_clean,   # 返回纯数字代码
                 'name': name,
                 'market': stock.get('market', ''),
-                'display': f"{code} - {name}"
+                'display': f"{code_clean} - {name}"
             })
             if len(results) >= 10:
                 break
-    
+
     return jsonify(results)
 
 @app.route('/api/search_stock_code')
@@ -121,10 +138,15 @@ def search_stock_code_api():
     name_lower = name.lower()
     for stock in STOCK_LIST:
         if stock.get('name', '').lower() == name_lower:
-            return jsonify({'code': stock.get('code')})
+            return jsonify({'code': normalize_stock_code(stock.get('code', ''))})
     for stock in STOCK_LIST:
         if name_lower in stock.get('name', '').lower():
-            return jsonify({'code': stock.get('code')})
+            return jsonify({'code': normalize_stock_code(stock.get('code', ''))})
+    # 也尝试直接作为代码匹配
+    for stock in STOCK_LIST:
+        code = stock.get('code', '')
+        if code == name or stock.get('code_clean', '') == normalize_stock_code(name):
+            return jsonify({'code': normalize_stock_code(code)})
     return jsonify({'code': None})
 
 @app.route('/api/analyze', methods=['POST'])
@@ -139,6 +161,8 @@ def analyze_stock():
             code = search_stock_code(name)
             if not code:
                 return jsonify({'error': f'stock not found: {name}'}), 404
+        # 标准化代码：剥离 sz/sh/bj 前缀
+        code = normalize_stock_code(code)
         report = analyze_stock_full(code)
         if 'error' in report:
             return jsonify({'error': report['error']}), 500
