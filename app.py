@@ -259,7 +259,7 @@ def search_stock_code(name):
 if __name__ == '__main__':
     import os
     port = int(os.environ.get('PORT', 5000))
-    host = os.environ.get('HOST', '127.0.0.1')
+    host = os.environ.get('HOST', '0.0.0.0')
     print('=' * 60)
     print('Stock Value Analysis Website - Starting...')
     print(f'URL: http://{host}:{port}')
