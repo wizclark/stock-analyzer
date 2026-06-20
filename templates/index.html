@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StockAnalyzer — 价值分析平台</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<!-- Navigation -->
+<nav class="navbar">
+    <div class="nav-inner">
+        <a class="nav-brand" href="/">StockAnalyzer</a>
+        <div class="nav-links" id="navLinks">
+            <a href="/history" class="nav-link hidden" id="navHistory">历史记录</a>
+            <a href="/login" class="nav-link" id="navLogin">登录</a>
+            <a href="/register" class="nav-btn" id="navRegister">注册</a>
+            <span class="nav-user hidden" id="navUser">
+                <span id="navUsername"></span>
+                <a href="#" onclick="logout()" class="nav-link-logout">退出</a>
+            </span>
+        </div>
+    </div>
+</nav>
+
+<!-- Hero Section — Google style -->
+<section class="hero">
+    <div class="hero-inner">
+        <!-- Logo / Title -->
+        <div class="hero-logo">
+            <span class="logo-s">S</span><span class="logo-t">t</span><span class="logo-o">o</span><span class="logo-c">c</span><span class="logo-k">k</span>
+            <span class="logo-a">A</span><span class="logo-n">n</span><span class="logo-a2">a</span><span class="logo-l">l</span><span class="logo-y">y</span><span class="logo-z">z</span><span class="logo-e">e</span><span class="logo-r">r</span>
+        </div>
+        <p class="hero-subtitle">输入股票代码或名称，获取13章深度价值分析报告</p>
+
+        <!-- Google-style Search Box -->
+        <div class="google-search-wrap" id="searchWrap">
+            <div class="google-search-box" id="googleSearchBox">
+                <!-- Search Icon (left) -->
+                <svg class="google-search-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="10.5" cy="10.5" r="7" stroke="#9aa0a6" stroke-width="2"/>
+                    <path d="M15.5 15.5L21 21" stroke="#9aa0a6" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+                <!-- Input -->
+                <input type="text" id="stockInput"
+                       placeholder="输入股票代码或名称（如：603629、利通电子）"
+                       autocomplete="off" spellcheck="false">
+                <!-- Voice Icon (right) -->
+                <svg class="google-voice-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" title="语音输入（暂未开放）">
+                    <path d="M12 3a3 3 0 00-3 3v5a3 3 0 006 0V6a3 3 0 00-3-3z" fill="#4285f4"/>
+                    <path d="M19 10v2a7 7 0 01-14 0v-2M12 19v3M8 22h8" stroke="#4285f4" stroke-width="2" stroke-linecap="round"/>
+                </svg>
+            </div>
+            <!-- Suggestions dropdown -->
+            <div class="google-suggestions" id="suggestions"></div>
+
+            <!-- Two buttons below (Google style) -->
+            <div class="google-btn-row">
+                <button class="google-btn google-btn-primary" id="analyzeBtn" onclick="analyzeStock()">深度分析</button>
+                <button class="google-btn google-btn-secondary" onclick="luckyAnalyze()">手气不错</button>
+            </div>
+        </div>
+
+        <!-- Quick picks -->
+        <div class="quick-picks">
+            <span class="qp-label">热门：</span>
+            <button class="qp-btn" onclick="quickAnalyze('603629')">利通电子</button>
+            <button class="qp-btn" onclick="quickAnalyze('600519')">贵州茅台</button>
+            <button class="qp-btn" onclick="quickAnalyze('000858')">五粮液</button>
+            <button class="qp-btn" onclick="quickAnalyze('300750')">宁德时代</button>
+            <button class="qp-btn" onclick="quickAnalyze('688981')">中芯国际</button>
+        </div>
+    </div>
+</section>
+
+<!-- Loading State -->
+<div class="loading-overlay hidden" id="loadingOverlay">
+    <div class="loading-card">
+        <div class="spinner"></div>
+        <p class="loading-text" id="loadingText">正在分析，预计需要15-30秒...</p>
+        <p class="loading-sub">获取实时行情 · 读取财务数据 · 计算技术指标</p>
+    </div>
+</div>
+
+<!-- Report Container -->
+<main class="report-container hidden" id="reportContainer">
+
+    <!-- Report Header -->
+    <div class="report-header" id="reportHeader">
+        <div class="report-meta">
+            <h2 class="report-name" id="reportName"></h2>
+            <div class="report-tags" id="reportTags"></div>
+        </div>
+        <div class="report-actions">
+            <button class="btn-outline" onclick="exportPDF()" id="pdfBtn">
+                <svg viewBox="0 0 20 20" fill="none" width="14" height="14">
+                    <rect x="3" y="2" width="14" height="16" rx="2" stroke="currentColor" stroke-width="1.4"/>
+                    <path d="M7 7h6M7 10h6M7 13h4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
+                </svg>
+                导出PDF
+            </button>
+            <button class="btn-ghost" onclick="closeReport()">关闭</button>
+        </div>
+    </div>
+
+    <!-- Summary Bar -->
+    <div class="summary-bar" id="summaryBar"></div>
+
+    <!-- Chapter Navigation -->
+    <nav class="chapter-nav" id="chapterNav">
+        <button class="ch-tab active" data-ch="overview" onclick="showChapter(this,'overview')">概述</button>
+        <button class="ch-tab" data-ch="news" onclick="showChapter(this,'news')">最新动态</button>
+        <button class="ch-tab" data-ch="business" onclick="showChapter(this,'business')">业务板块</button>
+        <button class="ch-tab" data-ch="industry" onclick="showChapter(this,'industry')">行业分析</button>
+        <button class="ch-tab" data-ch="value" onclick="showChapter(this,'value')">价值投资</button>
+        <button class="ch-tab" data-ch="peers" onclick="showChapter(this,'peers')">同行对比</button>
+        <button class="ch-tab" data-ch="forecast" onclick="showChapter(this,'forecast')">利润预测</button>
+        <button class="ch-tab" data-ch="target" onclick="showChapter(this,'target')">目标价</button>
+        <button class="ch-tab" data-ch="tech" onclick="showChapter(this,'tech')">技术面</button>
+        <button class="ch-tab" data-ch="risks" onclick="showChapter(this,'risks')">风险提示</button>
+    </nav>
+
+    <!-- Chapter Panels -->
+    <div class="chapter-panels" id="chapterPanels"></div>
+
+</main>
+
+<!-- Toast -->
+<div class="toast hidden" id="toast"></div>
+
+<script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

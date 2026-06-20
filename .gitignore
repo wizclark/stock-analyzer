@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+venv/
+env/
+.env
+
+# Flask
+instance/
+.webassets-cache
+stock_website.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 临时文件
+data/knowledge_cache/
+*.log
+*.png
+*.pdf
+temp_*.json
+
+# Render
+.render/

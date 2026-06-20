@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>历史记录 — StockAnalyzer</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<nav class="navbar">
+    <div class="nav-inner">
+        <a class="nav-brand" href="/">StockAnalyzer</a>
+        <div class="nav-links">
+            <a href="/" class="nav-link">返回首页</a>
+            <a href="#" onclick="logout()" class="nav-link" style="color:#ff3b30">退出</a>
+        </div>
+    </div>
+</nav>
+
+<main style="max-width:900px;margin:0 auto;padding:32px 20px 60px">
+    <h1 style="font-size:22px;font-weight:700;letter-spacing:-.4px;margin-bottom:6px">历史分析记录</h1>
+    <p style="font-size:13px;color:#6e6e73;margin-bottom:24px">您的所有股票分析记录，点击"查看报告"可重新加载完整分析结果。</p>
+
+    <div class="section-card">
+        <div class="section-card-header">
+            <span class="section-card-title">分析历史</span>
+            <span class="section-card-badge" id="totalCount">加载中...</span>
+        </div>
+        <div class="section-card-body" id="historyList">
+            <div style="text-align:center;padding:24px;color:#8e8e93">
+                <div class="spinner" style="margin:0 auto 12px"></div>
+                <p>加载中...</p>
+            </div>
+        </div>
+    </div>
+</main>
+
+<div class="toast hidden" id="toast"></div>
+
+<script>
+async function loadHistory() {
+    try {
+        const resp = await fetch('/api/history');
+        if (resp.status === 401) {
+            window.location.href = '/login';
+            return;
+        }
+        const data = await resp.json();
+        document.getElementById('totalCount').textContent = `共 ${data.length} 条`;
+        if (data.length === 0) {
+            document.getElementById('historyList').innerHTML = `
+                <p style="text-align:center;color:#8e8e93;padding:24px">
+                    暂无历史记录。<a href="/">开始分析</a>
+                </p>`;
+            return;
+        }
+        document.getElementById('historyList').innerHTML = `
+            <table class="data-table" style="width:100%">
+                <tr><th>股票代码</th><th>股票名称</th><th>分析时间</th><th>操作</th></tr>
+                ${data.map(item => `
+                    <tr>
+                        <td style="font-family:var(--font-mono)">${item.stock_code}</td>
+                        <td>${item.stock_name || '—'}</td>
+                        <td style="font-size:11px;color:#8e8e93">${item.query_time}</td>
+                        <td>
+                            <a href="/?code=${item.stock_code}" style="font-size:12px;color:#0071e3">查看</a>
+                            ${!item.stock_name?.includes('[PDF]') ? `
+                            <span style="margin:0 4px;color:#d1d1d6">|</span>
+                            <a href="#" onclick="downloadPDF(${item.id},'${item.stock_code}')" style="font-size:12px;color:#8e8e93">PDF</a>
+                            ` : ''}
+                        </td>
+                    </tr>
+                `).join('')}
+            </table>
+        `;
+    } catch (e) {
+        document.getElementById('historyList').innerHTML = `<p style="color:#ff3b30;padding:16px">加载失败：${e.message}</p>`;
+    }
+}
+
+async function downloadPDF(historyId, code) {
+    showToast('正在生成PDF，请稍候...');
+    try {
+        const detailResp = await fetch(`/api/history/${historyId}`);
+        if (!detailResp.ok) { showToast('获取报告失败'); return; }
+        const report = await detailResp.json();
+
+        const pdfResp = await fetch('/api/export_pdf', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code, report })
+        });
+        if (!pdfResp.ok) {
+            const err = await pdfResp.json();
+            showToast(`PDF生成失败：${err.error}`);
+            return;
+        }
+        const blob = await pdfResp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${code}_价值分析报告.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('PDF已下载！');
+    } catch (e) {
+        showToast('下载失败，请重试');
+    }
+}
+
+async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login';
+}
+
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.remove('hidden');
+    clearTimeout(t._t);
+    t._t = setTimeout(() => t.classList.add('hidden'), 3000);
+}
+
+loadHistory();
+
+// Handle ?code= param
+const urlParams = new URLSearchParams(window.location.search);
+const codeParam = urlParams.get('code');
+if (codeParam) {
+    window.location.href = `/?preload=${codeParam}`;
+}
+</script>
+</body>
+</html>
