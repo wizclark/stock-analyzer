@@ -32,3 +32,8 @@ temp_*.json
 
 # Render
 .render/
+
+# 大字体文件（改为运行时自动下载）
+fonts/*.ttf
+fonts/*.ttc
+fonts/*.otf

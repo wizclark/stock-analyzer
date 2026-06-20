@@ -10,7 +10,65 @@ import io
 import json
 import math
 import tempfile
+import urllib.request
+import ssl
 from datetime import datetime
+
+# ============================================================
+# 自动下载中文字体（首次运行时）
+# ============================================================
+
+def ensure_chinese_font():
+    """
+    确保中文字体存在。
+    - 如果 fonts/NotoSansSC.ttf 已存在，直接返回路径
+    - 否则自动从网络下载（仅首次，~17MB）
+    - 下载失败则返回 None，后续会用 Helvetica 替代（中文显示方块）
+    """
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    font_dir = os.path.join(base_dir, 'fonts')
+    font_path = os.path.join(font_dir, 'NotoSansSC.ttf')
+
+    # 已有字体
+    if os.path.exists(font_path) and os.path.getsize(font_path) > 5000000:
+        return font_path
+
+    # 创建目录
+    os.makedirs(font_dir, exist_ok=True)
+
+    # 多个下载源（按优先级，前一个失败自动换下一个）
+    sources = [
+        # 清华大学镜像站（国内速度快）
+        'https://mirrors.tuna.tsinghua.edu.cn/github-release/googlefonts/noto-cjk/LatestRelease/03_NotoSansCJKsc.zip',
+        # GitHub 反向代理（国内可访问）
+        'https://ghproxy.com/https://github.com/googlefonts/noto-cjk/releases/download/Sans2.004R/03_NotoSansCJKsc.zip',
+        # 原始地址（可能较慢）
+        'https://github.com/googlefonts/noto-cjk/releases/download/Sans2.004R/03_NotoSansCJKsc.zip',
+    ]
+
+    for url in sources:
+        try:
+            print(f'[PDF] 正在下载中文字体 (~17MB)，来源: {url[:60]}...')
+            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            with urllib.request.urlopen(req, context=ctx, timeout=120) as resp:
+                data = resp.read()
+            # 写入临时文件
+            with open(font_path, 'wb') as f:
+                f.write(data)
+            if os.path.getsize(font_path) > 5000000:
+                print(f'[PDF] ✅ 字体下载成功: {font_path}')
+                return font_path
+        except Exception as e:
+            print(f'[PDF] 下载失败 ({url[:40]}...): {e}')
+            continue
+
+    print('[PDF] ⚠️ 无法下载中文字体，PDF中文将显示为方块')
+    print('[PDF] 请手动下载 NotoSansSC.ttf 并放置到 fonts/ 目录')
+    return None
+
 
 # ReportLab
 from reportlab.lib.pagesizes import A4
@@ -39,6 +97,10 @@ from matplotlib import rcParams
 def register_fonts():
     """注册中文字体 — 优先使用项目内嵌字体，兼容 Linux/Windows/macOS"""
     import os
+    
+    # 先确保字体文件存在（自动下载）
+    ensure_chinese_font()
+    
     _font_ok = False
 
     # 1. 项目内嵌字体（最高优先级，确保 Linux/Render 可用）
