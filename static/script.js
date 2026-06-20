@@ -81,11 +81,18 @@ function setupSearch() {
 }
 
 async function fetchSuggestions(q) {
+    const searchBox = document.querySelector('.google-search-box');
+    searchBox.classList.add('loading');
+    
     try {
         const resp = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
         const items = await resp.json();
         renderSuggestions(items);
-    } catch (e) {}
+    } catch (e) {
+        hideSuggestions();
+    } finally {
+        searchBox.classList.remove('loading');
+    }
 }
 
 function renderSuggestions(items) {

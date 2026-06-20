@@ -48,6 +48,40 @@ button { cursor: pointer; font-family: var(--font); }
 /* ============================================================
    Navbar
    ============================================================ */
+
+/* Loading Spinner */
+.loading-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border-light);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Search Loading */
+.google-search-box.loading .google-search-icon {
+    display: none;
+}
+
+.google-search-box.loading::before {
+    content: '';
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    border: 2px solid #e8e8ed;
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+}
 .navbar {
     position: sticky;
     top: 0;

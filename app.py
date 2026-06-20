@@ -29,12 +29,15 @@ STOCK_LIST = []
 def load_stock_list():
     global STOCK_LIST
     try:
-        data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'stock_list.json')
+        # 优先加载完整列表
+        data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'stock_list_full.json')
+        if not os.path.exists(data_path):
+            data_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'stock_list.json')
         with open(data_path, 'r', encoding='utf-8') as f:
             STOCK_LIST = json.load(f)
-        print(f"loaded {len(STOCK_LIST)} stocks")
+        print(f"Loaded {len(STOCK_LIST)} stocks")
     except Exception as e:
-        print(f"stock list load failed: {e}")
+        print(f"Stock list load failed: {e}")
         STOCK_LIST = []
 
 # 初始化数据库和股票列表
@@ -72,19 +75,42 @@ def search_stocks():
     query = request.args.get('q', '').strip().lower()
     if not query or len(query) < 1:
         return jsonify([])
+    
     results = []
+    query_lower = query.lower()
+    
+    # 优化搜索：优先代码精确匹配，然后名称前缀匹配，最后名称包含匹配
     for stock in STOCK_LIST:
         code = stock.get('code', '')
         name = stock.get('name', '')
-        pinyin = stock.get('pinyin', '')
-        if query in code.lower() or query in name.lower() or query in pinyin.lower():
+        
+        matched = False
+        # 代码精确匹配（优先级最高）
+        if code == query:
+            matched = True
+        # 代码前缀匹配
+        elif code.startswith(query):
+            matched = True
+        # 名称精确匹配
+        elif name == query:
+            matched = True
+        # 名称前缀匹配
+        elif name.startswith(query.upper()) or name.lower().startswith(query_lower):
+            matched = True
+        # 名称包含匹配
+        elif query_lower in name.lower():
+            matched = True
+        
+        if matched:
             results.append({
-                'code': code, 'name': name,
+                'code': code, 
+                'name': name,
                 'market': stock.get('market', ''),
                 'display': f"{code} - {name}"
             })
             if len(results) >= 10:
                 break
+    
     return jsonify(results)
 
 @app.route('/api/search_stock_code')
@@ -259,7 +285,8 @@ def search_stock_code(name):
 if __name__ == '__main__':
     import os
     port = int(os.environ.get('PORT', 5000))
-    host = os.environ.get('HOST', '127.0.0.1')
+    # Render 需要绑定到 0.0.0.0，本地开发默认 127.0.0.1
+    host = os.environ.get('HOST', '0.0.0.0')
     print('=' * 60)
     print('Stock Value Analysis Website - Starting...')
     print(f'URL: http://{host}:{port}')
