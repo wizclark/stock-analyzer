@@ -738,39 +738,46 @@ def get_default_pe_by_industry(industry):
 
 def fetch_analyst_target_price(code):
     """
-    获取分析师目标价 — 从东方财富研报API
-    返回：{'source': '东方财富研报', 'targets': [...]} 或 None
+    获取分析师目标价 — 从东方财富研报API（仅最近6个月）
+    返回：{'source': ..., 'targets': [...], 'avg_target': ..., 'max_target': ..., 'min_target': ...} 或 None
     """
+    from datetime import datetime, timedelta
     results = []
+    now = datetime.now()
+    six_months_ago = now - timedelta(days=180)
+    begin_date = six_months_ago.strftime('%Y-%m-%d')
+    end_date = now.strftime('%Y-%m-%d')
+
     try:
-        # 东方财富研报列表API（JSONP格式）
         url = (
             f'https://reportapi.eastmoney.com/report/list?'
-            f'cb=jQuery&industryCode=*&pageSize=5&industry=*&rating=*&'
-            f'ratingChange=*&beginTime=2025-01-01&endTime=2026-12-31&'
+            f'cb=jQuery&industryCode=*&pageSize=20&industry=*&rating=*&'
+            f'ratingChange=*&beginTime={begin_date}&endTime={end_date}&'
             f'qType=0&orgCode=*&rcode=*&code={code}'
         )
-        content = fetch_url(url, timeout=8)
-        if content:
-            # 去掉JSONP包装
-            m = re.search(r'\((\{.*\})\)', content, re.DOTALL)
+        resp = fetch_url(url, timeout=10)
+        if resp:
+            m = re.search(r'\((\{.*\})\)', resp, re.DOTALL)
             if m:
                 data = json.loads(m.group(1))
                 reports = data.get('data', {}).get('list', []) or data.get('data', [])
-                for r in (reports if isinstance(reports, list) else [])[:5]:
+                if not isinstance(reports, list):
+                    reports = []
+                for r in reports[:20]:
                     tp = r.get('targetPrice') or r.get('target_price') or 0
                     if tp and float(tp) > 0:
+                        pub_date = (r.get('publishDate', '') or r.get('reportDate', ''))[:10]
                         results.append({
-                            'target_price': float(tp),
+                            'target_price': round(float(tp), 2),
                             'rating': r.get('rating', '') or r.get('ratingName', ''),
                             'institution': r.get('orgName', '') or r.get('orgSName', ''),
-                            'date': (r.get('publishDate', '') or r.get('reportDate', ''))[:10],
-                            'title': r.get('title', '') or r.get('reportTitle', ''),
+                            'date': pub_date,
+                            'title': (r.get('title', '') or r.get('reportTitle', ''))[:60],
                         })
     except Exception as e:
         print(f'[WARN] 分析师目标价获取失败 {code}: {e}')
 
-    # 备用：从知识库缓存读取（若用户已手动录入）
+    # 备用：从知识库缓存读取
     try:
         kb = load_knowledge_cache(code)
         if kb and kb.get('analyst_target_price'):
@@ -779,10 +786,14 @@ def fetch_analyst_target_price(code):
         pass
 
     if results:
+        prices = [t['target_price'] for t in results]
         return {
-            'source': '东方财富研报 + IMA知识库',
-            'targets': results[:5],
-            'avg_target': round(sum(t['target_price'] for t in results) / len(results), 2),
+            'source': '东方财富研报(近6个月) + IMA知识库',
+            'targets': results[:10],
+            'count': len(results),
+            'avg_target': round(sum(prices) / len(prices), 2),
+            'max_target': round(max(prices), 2),
+            'min_target': round(min(prices), 2),
         }
     return None
 
@@ -1125,12 +1136,16 @@ def build_report(code, name, quote, financials, tech, knowledge, industry, peers
     }
 
     # ==================== 第9章：目标价来源依据 ====================
+    # 获取分析师目标价（近6个月券商研报）
+    analyst_targets = fetch_analyst_target_price(code)
+
     report['ch9_target_price'] = {
         'title': '目标价来源依据',
         'pe_method': valuation.get('pe_method', {}),
         'dcf_method': valuation.get('dcf_method', {}),
         'peg_method': valuation.get('peg_method', {}),
-        'comprehensive': calculate_target_price(price, pe_ttm, profit_cagr, industry),
+        'analyst_targets': analyst_targets,
+        'comprehensive': calculate_target_price(price, pe_ttm, profit_cagr, industry, analyst_targets),
     }
 
     # ==================== 第10章：两种方法对比 ====================
@@ -1436,29 +1451,68 @@ def predict_profit(fin_summary):
     return result
 
 
-def calculate_target_price(price, pe, profit_cagr, industry=""):
-    """目标价计算 - 改进版：使用行业PE中位数"""
+def calculate_target_price(price, pe, profit_cagr, industry="", analyst_targets=None):
+    """目标价计算 - 优先使用券商研报目标价，PE法作为参考"""
     result = {}
+
+    # ---- 优先：券商研报目标价 ----
+    if analyst_targets and analyst_targets.get('targets'):
+        targets = analyst_targets['targets']
+        prices = [t['target_price'] for t in targets if t.get('target_price', 0) > 0]
+        if prices:
+            avg_tp = round(sum(prices) / len(prices), 2)
+            max_tp = round(max(prices), 2)
+            min_tp = round(min(prices), 2)
+            upside_avg = round((avg_tp / price - 1) * 100, 1) if price > 0 else 0
+
+            result["analyst_method"] = {
+                "target_range": f"{min_tp:.2f} - {max_tp:.2f}元",
+                "avg_target": f"{avg_tp:.2f}元",
+                "upside": f"{upside_avg:+.1f}%",
+                "count": len(prices),
+                "source": analyst_targets.get('source', '券商研报'),
+                "targets_detail": targets[:8],
+            }
+            # 以券商目标价作为综合目标价
+            result["primary"] = {
+                "method": "券商研报目标价（近6个月）",
+                "target_range": f"{min_tp:.2f} - {max_tp:.2f}元",
+                "avg_target": f"{avg_tp:.2f}元",
+                "upside": f"{upside_avg:+.1f}%",
+            }
+
+    # ---- 参考：PE法估值 ----
     if pe and pe > 0 and price > 0:
         d = get_default_pe_by_industry(industry)
         fair_pe = d["median"]
-        if profit_cagr > 30:
+        if profit_cagr and profit_cagr > 30:
             fair_pe = int(fair_pe * 1.2)
-        elif profit_cagr > 15:
+        elif profit_cagr and profit_cagr > 15:
             fair_pe = int(fair_pe)
-        elif profit_cagr > 0:
+        elif profit_cagr and profit_cagr > 0:
             fair_pe = int(fair_pe * 0.85)
         else:
             fair_pe = int(fair_pe * 0.7)
         fair_pe = max(5, min(fair_pe, 100))
         target_low = price * (fair_pe * 0.85 / pe)
         target_high = price * (fair_pe * 1.15 / pe)
+        pe_upside = round(((target_low + target_high) / 2 / price - 1) * 100, 1)
+
         result["pe_method"] = {
             "fair_pe": f"{fair_pe:.0f}x",
             "target_range": f"{target_low:.2f} - {target_high:.2f}元",
-            "upside": f"{((target_low+target_high)/2/price - 1)*100:.1f}%",
-            "industry_pe_median": f"{d["median"]}x（{industry or "未知"}行业中位数）",
+            "upside": f"{pe_upside:+.1f}%",
+            "industry_pe_median": f'{d["median"]}x（{industry or "未知"}行业中位数）',
         }
+        # 如果没有券商目标价，用PE法作为主目标价
+        if "primary" not in result:
+            result["primary"] = {
+                "method": "PE估值法（行业PE中位数参考）",
+                "target_range": f"{target_low:.2f} - {target_high:.2f}元",
+                "avg_target": f"{(target_low+target_high)/2:.2f}元",
+                "upside": f"{pe_upside:+.1f}%",
+            }
+
     return result
 
 def generate_integrated_conclusion(rating):

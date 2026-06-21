@@ -1014,10 +1014,53 @@ def generate_pdf(report, klines=None, output_path=None):
 
     # PE估值表格
     pe_method = ch9.get('pe_method', {})
+    analyst_targets = ch9.get('analyst_targets', {})
+    comp = ch9.get('comprehensive', {})
+    primary = comp.get('primary', {})
+
+    # 主目标价（优先券商研报）
+    if primary:
+        story.append(Paragraph(f"主目标价：{primary.get('method', '')}", styles['section_title']))
+        story.append(Paragraph(
+            f"目标价区间：{primary.get('target_range', 'N/A')}　|　"
+            f"目标价均值：{primary.get('avg_target', 'N/A')}　|　"
+            f"上行空间：{primary.get('upside', 'N/A')}",
+            styles['body']
+        ))
+        story.append(Spacer(1, 6))
+
+    # 券商研报目标价明细表
+    if analyst_targets and analyst_targets.get('targets'):
+        at_rows = [['日期', '机构', '评级', '目标价', '上行空间']]
+        for t in analyst_targets['targets'][:8]:
+            tp = t.get('target_price', 0)
+            upside = ''
+            if tp and ch1.get('current_price'):
+                try:
+                    cur = float(str(ch1['current_price']).replace('¥', ''))
+                    if cur > 0:
+                        upside = f"{(tp/cur-1)*100:.1f}%"
+                except:
+                    pass
+            at_rows.append([
+                t.get('date', ''),
+                t.get('institution', '')[:12],
+                t.get('rating', '')[:8],
+                f"¥{tp}",
+                upside,
+            ])
+        story.append(Paragraph('券商研报目标价（近6个月）', styles['section_title']))
+        t_at = make_table(at_rows, col_widths=[page_width*0.15, page_width*0.30, page_width*0.15, page_width*0.15, page_width*0.15])
+        if t_at:
+            story.append(t_at)
+        story.append(Paragraph(f"来源：{analyst_targets.get('source', '东方财富研报')}（仅统计近6个月研报）", styles['source_note']))
+        story.append(Spacer(1, 8))
+
+    # PE法估值表格（参考）
     if pe_method:
         val_data = [
             ['估值方法', '参数', '结论'],
-            ['PE估值法', f"合理PE区间：{pe_method.get('reasonable_pe_range', 'N/A')}",
+            ['PE估值法（参考）', f"合理PE区间：{pe_method.get('reasonable_pe_range', 'N/A')}",
              f"目标区间：{pe_method.get('fair_price_low','N/A')} - {pe_method.get('fair_price_high','N/A')}元"],
             ['DCF折现法', 'WACC=10%, g=3%, FCF=净利×70%', '详见完整分析报告'],
             ['PEG分析', 'PEG=PE/净利润增速', 'PEG<1低估，PEG=1-1.5合理'],
@@ -1025,7 +1068,7 @@ def generate_pdf(report, klines=None, output_path=None):
         t = make_table(val_data, col_widths=[page_width*0.2, page_width*0.4, page_width*0.4])
         if t:
             story.append(t)
-        story.append(Paragraph('来源：基于PE估值法计算，行业对比参考腾讯行情API', styles['source_note']))
+        story.append(Paragraph('来源：券商研报目标价来自东方财富研报API + PE估值法基于腾讯行情API', styles['source_note']))
 
     # ==================== 综合结论 ====================
     story.append(PageBreak())

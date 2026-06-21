@@ -580,6 +580,26 @@ function renderTarget(ch9, ch1) {
     const peg = ch9.peg_method || {};
     const comp = ch9.comprehensive || {};
     const peComp = comp.pe_method || {};
+    const analystComp = comp.analyst_method || {};
+    const primary = comp.primary || {};
+    const analystTargets = ch9.analyst_targets || null;
+
+    // 券商目标价明细表
+    let analystRows = '';
+    if (analystTargets && analystTargets.targets && analystTargets.targets.length > 0) {
+        analystRows = analystTargets.targets.map(t => {
+            const upside = t.target_price && ch1.current_price ? 
+                `<span style="color:${t.target_price > ch1.current_price ? '#34c759' : '#ff3b30'}">${((t.target_price/ch1.current_price-1)*100).toFixed(1)}%</span>` : '';
+            return `<tr><td>${t.date || ''}</td><td>${t.institution || ''}</td><td>${t.rating || ''}</td><td><strong>¥${t.target_price}</strong></td><td>${upside}</td></tr>`;
+        }).join('');
+    }
+
+    // 核心指标区：优先券商目标价
+    const mainTargetRange = primary.target_range || analystComp.target_range || peComp.target_range || 'N/A';
+    const mainTargetAvg = analystComp.avg_target || primary.avg_target || 'N/A';
+    const mainUpside = primary.upside || analystComp.upside || peComp.upside || 'N/A';
+    const mainMethod = primary.method || 'PE估值法';
+    const upsideClass = mainUpside.includes('-') ? 'text-down' : 'text-up';
 
     return `
     <div class="section-card">
@@ -587,16 +607,28 @@ function renderTarget(ch9, ch1) {
         <div class="section-card-body">
             <div class="val-box">
                 <div class="val-cell"><div class="val-cell-label">当前股价</div><div class="val-cell-value">¥${ch1.current_price || 'N/A'}</div></div>
-                <div class="val-cell"><div class="val-cell-label">PE估值目标区间</div><div class="val-cell-value" style="font-size:12px">${peComp.target_range || (pem.fair_price_low ? (pem.fair_price_low + ' - ' + pem.fair_price_high + '元') : 'N/A')}</div></div>
-                <div class="val-cell"><div class="val-cell-label">上行空间</div><div class="val-cell-value text-up">${peComp.upside || 'N/A'}</div></div>
+                <div class="val-cell"><div class="val-cell-label">目标价区间</div><div class="val-cell-value" style="font-size:13px;color:#0071e3">${mainTargetRange}</div></div>
+                <div class="val-cell"><div class="val-cell-label">目标价均值</div><div class="val-cell-value" style="font-size:13px">¥${mainTargetAvg}</div></div>
+                <div class="val-cell"><div class="val-cell-label">上行空间</div><div class="val-cell-value ${upsideClass}">${mainUpside}</div></div>
             </div>
+            <p class="text-sm" style="margin:4px 0 8px;color:#0071e3">主目标价方法：${mainMethod}</p>
+
+            ${analystTargets && analystTargets.targets && analystTargets.targets.length > 0 ? `
             <table class="data-table">
+                <tr><th colspan="5" style="background:#f0f4ff">券商研报目标价（近6个月，共${analystTargets.count || analystTargets.targets.length}家）</th></tr>
+                <tr><th>日期</th><th>机构</th><th>评级</th><th>目标价</th><th>上行空间</th></tr>
+                ${analystRows}
+            </table>
+            <div class="source-note">来源：${analystTargets.source || '东方财富研报'}（仅统计近6个月研报）</div>
+            ` : '<p class="text-sm" style="padding:8px;color:#8e8e93">近6个月暂无券商研报目标价数据</p>'}
+
+            <table class="data-table" style="margin-top:8px">
                 <tr><th>估值方法</th><th>核心参数</th><th>目标价结论</th></tr>
-                <tr><td>PE估值法</td><td>合理PE区间 ${pem.reasonable_pe_range || peComp.fair_pe || 'N/A'}</td><td>${pem.fair_price_low ? pem.fair_price_low + ' - ' + pem.fair_price_high + '元' : (peComp.target_range || 'N/A')}</td></tr>
+                <tr><td>PE估值法（参考）</td><td>合理PE ${pem.reasonable_pe_range || peComp.fair_pe || 'N/A'}</td><td>${peComp.target_range || (pem.fair_price_low ? pem.fair_price_low + ' - ' + pem.fair_price_high + '元' : 'N/A')}</td></tr>
                 <tr><td>DCF折现法</td><td>${dcf.assumptions ? Object.entries(dcf.assumptions).map(([k,v]) => k+'='+v).join(', ') : 'N/A'}</td><td>${dcf.note || '参见完整模型'}</td></tr>
                 <tr><td>PEG分析</td><td>${peg.formula || 'N/A'}</td><td>${peg.benchmark || 'N/A'}</td></tr>
             </table>
-            <div class="source-note">来源：PE估值法基于腾讯行情API实时PE + 行业合理PE区间参考值</div>
+            <div class="source-note">来源：券商研报目标价来自东方财富研报API + PE估值法基于腾讯行情API实时PE</div>
         </div>
     </div>
     `;
