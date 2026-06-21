@@ -590,24 +590,201 @@ def fetch_business_segments(code, name, industry):
 
 # 行业分类映射（申万行业部分映射）
 INDUSTRY_MAP = {
-    '600519': '白酒', '000858': '白酒', '000568': '白酒',
-    '601318': '保险', '601628': '保险',
-    '000002': '房地产开发', '001979': '房地产开发',
-    '300750': '锂电池', '002594': '新能源汽车',
-    '603629': '电子零部件/算力租赁',
-    '688981': '半导体', '002371': '半导体设备',
-    '601012': '光伏', '688599': '光伏组件',
-    '300059': '互联网金融', '600570': '金融IT',
-    '002415': '安防', '002230': 'AI语音',
+    # 白酒
+    '600519': '白酒', '000858': '白酒', '000568': '白酒', '002304': '白酒', '603369': '白酒',
+    # 保险
+    '601318': '保险', '601628': '保险', '601601': '保险', '601336': '保险', '601319': '保险',
+    # 房地产开发
+    '000002': '房地产开发', '001979': '房地产开发', '600048': '房地产开发',
+    # 锂电池 / 新能源车
+    '300750': '锂电池', '002594': '新能源汽车', '300014': '锂电池', '688567': '锂电池', '300450': '锂电池',
+    # 电子零部件 / 算力
+    '603629': '电子零部件', '002229': '电子零部件', '300502': '电子零部件', '000977': '电子零部件', '002241': '电子零部件',
+    # 半导体
+    '688981': '半导体', '002371': '半导体设备', '688012': '半导体设备', '688303': '半导体', '600460': '半导体', '688396': '半导体',
+    # 光伏
+    '601012': '光伏', '688599': '光伏组件', '300274': '光伏逆变器', '002459': '光伏',
+    # 金融科技
+    '300059': '互联网金融', '600570': '金融IT', '300033': '互联网金融', '300773': '互联网金融',
+    # 安防 / AI
+    '002415': '安防', '002230': 'AI语音', '300124': '工控', '688256': '半导体',
+    # 银行
+    '600036': '银行', '601166': '银行', '601398': '银行', '601288': '银行', '600000': '银行',
+    # 电力
+    '600900': '电力', '600795': '电力', '600011': '电力',
+    # 家电
+    '000333': '家电', '000651': '家电', '603486': '家电',
+    # 医药
+    '600276': '医药', '000661': '医药', '300760': '医疗器械', '300015': '医药',
 }
 
-# 行业同行映射
+# 行业同行映射（用于PE对比和目标价参考）
 PEER_MAP = {
-    '603629': ['002229', '300502', '000977'],
-    '600519': ['000858', '000568', '002304'],
-    '601318': ['601628', '601601', '601336'],
-    '300750': ['002594', '300014', '688567'],
+    '603629': ['002229', '300502', '000977', '002241'],  # 电子零部件
+    '600519': ['000858', '000568', '002304', '603369'],  # 白酒
+    '601318': ['601628', '601601', '601336', '601319'],  # 保险
+    '300750': ['002594', '300014', '688567', '300450'],  # 锂电池
+    '688981': ['002371', '688012', '688303', '600460', '688396'],  # 半导体
+    '601012': ['688599', '300274', '002459', '688599'],  # 光伏
+    '300059': ['600570', '300033', '300773'],  # 金融科技
+    '000002': ['001979', '600048'],  # 房地产开发
+    '600036': ['601166', '601398', '601288'],  # 银行
+    '600900': ['600795', '600011'],  # 电力
+    '000333': ['000651', '603486'],  # 家电
+    '600276': ['000661', '300760', '300015'],  # 医药
 }
+
+
+# 美股同行PE参考（静态参考值，定期手动更新）
+US_PE_REFERENCE = {
+    '白酒': {
+        'pe_range': '25-40x',
+        'us_peers': '太极集团(ADR N/A)，参考A股白酒PE',
+        'note': 'A股白酒PE通常20-40x，高端白酒估值更高',
+    },
+    '半导体': {
+        'pe_range': '30-80x',
+        'us_peers': 'NVDA: 40-70x, AMD: 30-60x, INTC: 12-25x, TSM: 20-35x',
+        'note': '美股半导体PE差异极大，AI芯片公司估值远高于传统芯片',
+    },
+    '锂电池': {
+        'pe_range': '20-50x',
+        'us_peers': 'TSLA: 40-100x, ENPH: 20-50x',
+        'note': '新能源车产业链PE波动大，景气周期影响显著',
+    },
+    '光伏': {
+        'pe_range': '10-30x',
+        'us_peers': 'ENPH: 20-50x, FSLR: 15-30x, RUN: N/A',
+        'note': '光伏行业估值持续受压，产能过剩导致PE普遍偏低',
+    },
+    '保险': {
+        'pe_range': '10-20x',
+        'us_peers': 'MET: 12-20x, PRU: 10-18x, AIG: 10-16x',
+        'note': '传统金融行业PE较低，成长性有限',
+    },
+    '银行': {
+        'pe_range': '5-12x',
+        'us_peers': 'JPM: 12-18x, BAC: 10-16x, WFC: 10-15x',
+        'note': '银行业PE普遍较低，高分红是主要投资逻辑',
+    },
+    '新能源汽车': {
+        'pe_range': '20-60x',
+        'us_peers': 'TSLA: 40-100x, RIVN: N/A, LCID: N/A',
+        'note': '新能源车估值分化极大，盈利公司PE稳定在20-40x',
+    },
+    '电子零部件': {
+        'pe_range': '20-45x',
+        'us_peers': 'AAPL: 25-40x, MSFT: 30-50x, NVDA: 40-80x',
+        'note': '消费电子PE相对稳定，AI算力相关零部件估值更高',
+    },
+    '互联网金融': {
+        'pe_range': '20-50x',
+        'us_peers': 'COIN: 15-40x, HOOD: 20-60x, SQ: 30-80x',
+        'note': '金融科技估值波动大，受加密市场影响显著',
+    },
+    '家电': {
+        'pe_range': '12-25x',
+        'us_peers': 'WHRL: 8-15x, ELUXY: 10-18x',
+        'note': '家电行业成熟，PE相对稳定',
+    },
+    '医药': {
+        'pe_range': '20-50x',
+        'us_peers': 'JNJ: 15-20x, PFE: 12-18x, MRNA: N/A',
+        'note': '医药PE分化大，创新药公司估值高，仿制药公司估值低',
+    },
+    '电力': {
+        'pe_range': '10-20x',
+        'us_peers': 'NEE: 20-30x, DUK: 18-25x',
+        'note': '电力行业稳定，PE偏低但分红率高',
+    },
+    '房地产开发': {
+        'pe_range': '5-15x',
+        'us_peers': 'DHI: 8-15x, LENN: 8-15x',
+        'note': '房地产行业估值普遍偏低，受政策影响大',
+    },
+}
+
+
+def get_us_peer_pe(industry):
+    """获取美股同行PE参考"""
+    return US_PE_REFERENCE.get(industry, {
+        'pe_range': '15-35x',
+        'us_peers': '数据不足，请手动补充',
+        'note': '行业未知，使用保守估值区间',
+    })
+
+
+def get_default_pe_by_industry(industry):
+    """按行业返回默认PE区间（当无同行数据时使用）"""
+    defaults = {
+        '白酒':      {'median': 30, 'mean': 32, 'p25': 22, 'p75': 42},
+        '半导体':    {'median': 48, 'mean': 55, 'p25': 30, 'p75': 75},
+        '锂电池':    {'median': 35, 'mean': 38, 'p25': 25, 'p75': 55},
+        '光伏':      {'median': 18, 'mean': 22, 'p25': 12, 'p75': 32},
+        '保险':      {'median': 14, 'mean': 15, 'p25': 10, 'p75': 22},
+        '银行':      {'median': 6,  'mean': 7,  'p25': 5,  'p75': 10},
+        '新能源汽车': {'median': 42, 'mean': 48, 'p25': 28, 'p75': 68},
+        '电子零部件': {'median': 32, 'mean': 35, 'p25': 22, 'p75': 48},
+        '互联网金融': {'median': 32, 'mean': 38, 'p25': 22, 'p75': 55},
+        '房地产开发': {'median': 10, 'mean': 12, 'p25': 8,  'p75': 20},
+        '家电':      {'median': 18, 'mean': 20, 'p25': 14, 'p75': 28},
+        '医药':      {'median': 32, 'mean': 38, 'p25': 22, 'p75': 58},
+        '电力':      {'median': 15, 'mean': 16, 'p25': 12, 'p75': 22},
+        '制造业':    {'median': 25, 'mean': 28, 'p25': 18, 'p75': 42},
+        '创业板':    {'median': 35, 'mean': 40, 'p25': 22, 'p75': 60},
+    }
+    return defaults.get(industry, {'median': 24, 'mean': 28, 'p25': 16, 'p75': 40})
+
+
+def fetch_analyst_target_price(code):
+    """
+    获取分析师目标价 — 从东方财富研报API
+    返回：{'source': '东方财富研报', 'targets': [...]} 或 None
+    """
+    results = []
+    try:
+        # 东方财富研报列表API（JSONP格式）
+        url = (
+            f'https://reportapi.eastmoney.com/report/list?'
+            f'cb=jQuery&industryCode=*&pageSize=5&industry=*&rating=*&'
+            f'ratingChange=*&beginTime=2025-01-01&endTime=2026-12-31&'
+            f'qType=0&orgCode=*&rcode=*&code={code}'
+        )
+        content = fetch_url(url, timeout=8)
+        if content:
+            # 去掉JSONP包装
+            m = re.search(r'\((\{.*\})\)', content, re.DOTALL)
+            if m:
+                data = json.loads(m.group(1))
+                reports = data.get('data', {}).get('list', []) or data.get('data', [])
+                for r in (reports if isinstance(reports, list) else [])[:5]:
+                    tp = r.get('targetPrice') or r.get('target_price') or 0
+                    if tp and float(tp) > 0:
+                        results.append({
+                            'target_price': float(tp),
+                            'rating': r.get('rating', '') or r.get('ratingName', ''),
+                            'institution': r.get('orgName', '') or r.get('orgSName', ''),
+                            'date': (r.get('publishDate', '') or r.get('reportDate', ''))[:10],
+                            'title': r.get('title', '') or r.get('reportTitle', ''),
+                        })
+    except Exception as e:
+        print(f'[WARN] 分析师目标价获取失败 {code}: {e}')
+
+    # 备用：从知识库缓存读取（若用户已手动录入）
+    try:
+        kb = load_knowledge_cache(code)
+        if kb and kb.get('analyst_target_price'):
+            results = kb['analyst_target_price'] + results
+    except Exception:
+        pass
+
+    if results:
+        return {
+            'source': '东方财富研报 + IMA知识库',
+            'targets': results[:5],
+            'avg_target': round(sum(t['target_price'] for t in results) / len(results), 2),
+        }
+    return None
 
 
 def get_industry(code, name):
@@ -677,7 +854,7 @@ def analyze_stock_full(code):
     peers = get_peers(code)
 
     # 8. 估值分析
-    valuation = analyze_valuation(price, pe_ttm, market_cap, financials)
+    valuation = analyze_valuation(price, pe_ttm, market_cap, financials, code, industry, peers)
 
     # 9. 构建报告
     report = build_report(code, name, quote, financials, tech, knowledge, industry, peers, valuation, news_list, biz_info)
@@ -694,39 +871,84 @@ def analyze_stock_full(code):
     return report
 
 
-def analyze_valuation(price, pe_ttm, market_cap, financials):
-    """估值分析"""
+def analyze_valuation(price, pe_ttm, market_cap, financials, code, industry, peers):
+    """估值分析 - 改进版：同行PE对比 + 美股参考 + 分析师目标价"""
     result = {
         'pe_ttm': pe_ttm,
         'pe_level': get_valuation_level(pe_ttm),
     }
 
-    # PE法估值
-    if pe_ttm and pe_ttm > 0:
-        # 假设行业合理PE 15-25
-        reasonable_pe_low = 15
-        reasonable_pe_high = 25
-        fair_low = price * (reasonable_pe_low / pe_ttm)
-        fair_high = price * (reasonable_pe_high / pe_ttm)
-        result['pe_method'] = {
-            'reasonable_pe_range': f'{reasonable_pe_low}x - {reasonable_pe_high}x',
-            'fair_price_low': round(fair_low, 2),
-            'fair_price_high': round(fair_high, 2),
-        }
+    # 1. 获取同行PE数据
+    peer_pe_data = []
+    for peer_code in peers[:6]:  # 最多6个同行
+        try:
+            peer_quote = get_realtime_quote(peer_code)
+            if (peer_quote and peer_quote["pe_ttm"]
+                    and peer_quote["pe_ttm"] > 0 and peer_quote["pe_ttm"] < 200):
+                peer_pe_data.append({
+                    'code': peer_code,
+                    'name': peer_quote['name'],
+                    'pe_ttm': round(peer_quote['pe_ttm'], 1),
+                    'price': peer_quote['price'],
+                })
+        except Exception as e:
+            print(f'[WARN] 同行PE获取失败 {peer_code}: {e}')
+            pass
 
-    # DCF简化估值
+    # 2. 计算行业PE统计（中位数 + 25%/75%分位数）
+    peer_pe_values = [p['pe_ttm'] for p in peer_pe_data]
+    if peer_pe_values and len(peer_pe_values) >= 2:
+        s = sorted(peer_pe_values)
+        n = len(s)
+        pe_median = s[n // 2]
+        pe_mean = sum(s) / n
+        p25 = s[n // 4]
+        p75 = s[3 * n // 4]
+    else:
+        d = get_default_pe_by_industry(industry)
+        pe_median, pe_mean = d["median"], d["mean"]
+        p25, p75 = d["p25"], d["p75"]
+
+    # 3. 美股同行PE参考
+    us_ref = get_us_peer_pe(industry)
+
+    # 4. PE法估值
+    if pe_ttm and pe_ttm > 0:
+        low = max(round(p25, 0), 5)
+        high = min(round(p75, 0), 100)
+        fl = price * (low / pe_ttm)
+        fh = price * (high / pe_ttm)
+        if low <= pe_ttm <= high:
+            note = f'当前PE({pe_ttm:.0f}x)在合理区间({low:.0f}-{high:.0f}x)内，估值合理'
+        elif pe_ttm < low:
+            note = f'当前PE({pe_ttm:.0f}x)低于行业下限({low:.0f}x)，存在低估可能'
+        else:
+            note = f'当前PE({pe_ttm:.0f}x)高于行业上限({high:.0f}x)，估值偏高'
+        result['pe_method'] = {
+            'peer_pe_data': peer_pe_data,
+            'industry_pe_avg': round(pe_mean, 1),
+            'industry_pe_median': round(pe_median, 1),
+            'reasonable_pe_range': f'{low:.0f}x - {high:.0f}x',
+            'fair_price_low': round(fl, 2),
+            'fair_price_high': round(fh, 2),
+            'target_note': note,
+            'us_pe_reference': us_ref,
+        }
+        # 5. 分析师目标价
+        at = fetch_analyst_target_price(code)
+        if at:
+            result['pe_method']['analyst_target_price'] = at
+    else:
+        result['pe_method'] = {'note': 'PE为负或零，无法使用PE法进行估值', 'us_pe_reference': us_ref}
+
+    # 6. DCF简化估值（保持不变）
     if market_cap and market_cap > 0:
-        # 假设FCF = 净利润 * 0.7, WACC = 10%, g = 3%
         result['dcf_method'] = {
-            'assumptions': {
-                'wacc': '10%',
-                'growth_rate': '3%',
-                'fcf_ratio': '70%（净利润×0.7估算FCF）',
-            },
+            'assumptions': {'wacc': '10%', 'growth_rate': '3%', 'fcf_ratio': '70%（净利润×0.7估算FCF）'},
             'note': 'DCF精确估值需要完整的现金流预测模型，此处仅作参考框架'
         }
 
-    # PEG分析
+    # 7. PEG分析（保持不变）
     if pe_ttm and pe_ttm > 0:
         result['peg_method'] = {
             'formula': 'PE / 净利润增速(%)',
@@ -734,8 +956,6 @@ def analyze_valuation(price, pe_ttm, market_cap, financials):
         }
 
     return result
-
-
 def extract_financial_summary(financials):
     """提取关键财务指标"""
     summary = {
@@ -910,7 +1130,7 @@ def build_report(code, name, quote, financials, tech, knowledge, industry, peers
         'pe_method': valuation.get('pe_method', {}),
         'dcf_method': valuation.get('dcf_method', {}),
         'peg_method': valuation.get('peg_method', {}),
-        'comprehensive': calculate_target_price(price, pe_ttm, profit_cagr),
+        'comprehensive': calculate_target_price(price, pe_ttm, profit_cagr, industry),
     }
 
     # ==================== 第10章：两种方法对比 ====================
@@ -1167,24 +1387,30 @@ def predict_profit(fin_summary):
     return result
 
 
-def calculate_target_price(price, pe, profit_cagr):
-    """目标价计算"""
+def calculate_target_price(price, pe, profit_cagr, industry=""):
+    """目标价计算 - 改进版：使用行业PE中位数"""
     result = {}
     if pe and pe > 0 and price > 0:
-        # PE法
-        fair_pe = min(max(15, profit_cagr * 0.8 if profit_cagr > 0 else 15), 30)
-        target_pe = fair_pe
-        target_low = price * (fair_pe / pe)
-        target_high = price * ((fair_pe + 5) / pe)
-
-        result['pe_method'] = {
-            'fair_pe': f'{fair_pe:.0f}x',
-            'target_range': f'{target_low:.2f} - {target_high:.2f}元',
-            'upside': f'{((target_low+target_high)/2/price - 1)*100:.1f}%',
+        d = get_default_pe_by_industry(industry)
+        fair_pe = d["median"]
+        if profit_cagr > 30:
+            fair_pe = int(fair_pe * 1.2)
+        elif profit_cagr > 15:
+            fair_pe = int(fair_pe)
+        elif profit_cagr > 0:
+            fair_pe = int(fair_pe * 0.85)
+        else:
+            fair_pe = int(fair_pe * 0.7)
+        fair_pe = max(5, min(fair_pe, 100))
+        target_low = price * (fair_pe * 0.85 / pe)
+        target_high = price * (fair_pe * 1.15 / pe)
+        result["pe_method"] = {
+            "fair_pe": f"{fair_pe:.0f}x",
+            "target_range": f"{target_low:.2f} - {target_high:.2f}元",
+            "upside": f"{((target_low+target_high)/2/price - 1)*100:.1f}%",
+            "industry_pe_median": f"{d["median"]}x（{industry or "未知"}行业中位数）",
         }
-
     return result
-
 
 def generate_integrated_conclusion(rating):
     """综合结论"""

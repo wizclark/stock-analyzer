@@ -43,11 +43,12 @@ def register_fonts():
     _selected_font_path = None  # 记录成功加载的字体路径
 
     # 1. 项目内嵌字体（最高优先级，确保 Linux/Render 可用）
+    # 注意：优先使用 SimHei.ttf（Regular字重），避免 NotoSansSC-Thin 在部分阅读器中乱码
     embed_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
     embed_paths = [
-        os.path.join(embed_dir, 'NotoSansSC.ttf'),
         os.path.join(embed_dir, 'SimHei.ttf'),
         os.path.join(embed_dir, 'msyh.ttc'),
+        os.path.join(embed_dir, 'NotoSansSC.ttf'),
     ]
     for path in embed_paths:
         if os.path.exists(path):
