@@ -1138,14 +1138,26 @@ def build_report(code, name, quote, financials, tech, knowledge, industry, peers
     # ==================== 第9章：目标价来源依据 ====================
     # 获取分析师目标价（近6个月券商研报）
     analyst_targets = fetch_analyst_target_price(code)
-
+    
+    # 获取正确的净利润（按优先级）
+    correct_profit = get_correct_net_profit(code)
+    net_profit_correct = correct_profit.get('net_profit')
+    profit_method = correct_profit.get('method', '')
+    profit_source = correct_profit.get('source', '')
+    
     report['ch9_target_price'] = {
         'title': '目标价来源依据',
         'pe_method': valuation.get('pe_method', {}),
         'dcf_method': valuation.get('dcf_method', {}),
         'peg_method': valuation.get('peg_method', {}),
         'analyst_targets': analyst_targets,
-        'comprehensive': calculate_target_price(price, pe_ttm, profit_cagr, industry, analyst_targets),
+        'comprehensive': calculate_target_price(price, pe_ttm, profit_cagr, industry, analyst_targets, net_profit_correct, market_cap),
+        'profit_info': {
+            'net_profit': net_profit_correct,
+            'method': profit_method,
+            'source': profit_source,
+            'details': correct_profit.get('details', {}),
+        },
     }
 
     # ==================== 第10章：两种方法对比 ====================
@@ -1451,10 +1463,15 @@ def predict_profit(fin_summary):
     return result
 
 
-def calculate_target_price(price, pe, profit_cagr, industry="", analyst_targets=None):
-    """目标价计算 - 优先使用券商研报目标价，PE法作为参考"""
+def calculate_target_price(price, pe, profit_cagr, industry="", analyst_targets=None, net_profit=None, market_cap=None):
+    """
+    目标价计算 - 优先使用券商研报目标价，PE法作为参考
+    新增参数：
+    - net_profit: 正确的净利润（亿元，来自 get_correct_net_profit()）
+    - market_cap: 总市值（亿元）
+    """
     result = {}
-
+    
     # ---- 优先：券商研报目标价 ----
     if analyst_targets and analyst_targets.get('targets'):
         targets = analyst_targets['targets']
@@ -1464,7 +1481,7 @@ def calculate_target_price(price, pe, profit_cagr, industry="", analyst_targets=
             max_tp = round(max(prices), 2)
             min_tp = round(min(prices), 2)
             upside_avg = round((avg_tp / price - 1) * 100, 1) if price > 0 else 0
-
+            
             result["analyst_method"] = {
                 "target_range": f"{min_tp:.2f} - {max_tp:.2f}元",
                 "avg_target": f"{avg_tp:.2f}元",
@@ -1480,8 +1497,8 @@ def calculate_target_price(price, pe, profit_cagr, industry="", analyst_targets=
                 "avg_target": f"{avg_tp:.2f}元",
                 "upside": f"{upside_avg:+.1f}%",
             }
-
-    # ---- 参考：PE法估值 ----
+    
+    # ---- 参考：PE法估值（使用正确的净利润）----
     if pe and pe > 0 and price > 0:
         d = get_default_pe_by_industry(industry)
         fair_pe = d["median"]
@@ -1494,25 +1511,57 @@ def calculate_target_price(price, pe, profit_cagr, industry="", analyst_targets=
         else:
             fair_pe = int(fair_pe * 0.7)
         fair_pe = max(5, min(fair_pe, 100))
+        
+        # 方法1：相对估值法（当前方法）
         target_low = price * (fair_pe * 0.85 / pe)
         target_high = price * (fair_pe * 1.15 / pe)
         pe_upside = round(((target_low + target_high) / 2 / price - 1) * 100, 1)
-
+        
         result["pe_method"] = {
             "fair_pe": f"{fair_pe:.0f}x",
             "target_range": f"{target_low:.2f} - {target_high:.2f}元",
             "upside": f"{pe_upside:+.1f}%",
             "industry_pe_median": f'{d["median"]}x（{industry or "未知"}行业中位数）',
         }
-        # 如果没有券商目标价，用PE法作为主目标价
-        if "primary" not in result:
-            result["primary"] = {
-                "method": "PE估值法（行业PE中位数参考）",
-                "target_range": f"{target_low:.2f} - {target_high:.2f}元",
-                "avg_target": f"{(target_low+target_high)/2:.2f}元",
-                "upside": f"{pe_upside:+.1f}%",
+        
+        # 方法2：绝对估值法（使用正确的净利润）
+        if net_profit and market_cap and market_cap > 0:
+            # 计算总股本（亿股）
+            shares = market_cap / price  # 亿股
+            # 预测EPS（元/股）
+            eps_forecast = (net_profit * 100000000) / (shares * 100000000)  # 元/股
+            # 目标价 = 合理PE × 预测EPS
+            target_price_abs = fair_pe * eps_forecast
+            target_low_abs = target_price_abs * 0.85
+            target_high_abs = target_price_abs * 1.15
+            
+            result["abs_method"] = {
+                "method": "绝对估值法（基于正确净利润）",
+                "net_profit": f"{net_profit:.2f}亿",
+                "eps_forecast": f"{eps_forecast:.2f}元/股",
+                "target_price": f"{target_price_abs:.2f}元",
+                "target_range": f"{target_low_abs:.2f} - {target_high_abs:.2f}元",
+                "upside": f"{round((target_price_abs / price - 1) * 100, 1):+.1f}%",
             }
-
+            
+            # 如果没有券商目标价，使用绝对估值法作为主目标价
+            if "primary" not in result:
+                result["primary"] = {
+                    "method": "绝对估值法（基于正确净利润）",
+                    "target_range": f"{target_low_abs:.2f} - {target_high_abs:.2f}元",
+                    "avg_target": f"{target_price_abs:.2f}元",
+                    "upside": f"{round((target_price_abs / price - 1) * 100, 1):+.1f}%",
+                }
+        else:
+            # 如果没有正确的净利润，用PE法作为主目标价
+            if "primary" not in result:
+                result["primary"] = {
+                    "method": "PE估值法（行业PE中位数参考）",
+                    "target_range": f"{target_low:.2f} - {target_high:.2f}元",
+                    "avg_target": f"{(target_low+target_high)/2:.2f}元",
+                    "upside": f"{pe_upside:+.1f}%",
+                }
+    
     return result
 
 def generate_integrated_conclusion(rating):
