@@ -961,6 +961,44 @@ def generate_pdf(report, klines=None, output_path=None):
         story.append(img)
         story.append(Paragraph('数据来源：腾讯行情API (qt.gtimg.cn)　数据为实时行情，蓝色柱为目标公司', styles['source_note']))
 
+    # ==================== 利润预测 ====================
+    story.append(Spacer(1, 8))
+    story.append(Paragraph('第八章　净利润预测依据', styles['chapter_title']))
+    story.append(HRFlowable(width='100%', thickness=0.5, color=colors.HexColor('#0071e3')))
+    story.append(Spacer(1, 4))
+
+    prediction = ch8.get('prediction', {})
+    hist_data = prediction.get('historical', [])
+    fc_next = prediction.get('forecast_next', {})
+    # 兼容动态key
+    if not fc_next:
+        for k, v in prediction.items():
+            if k.startswith('forecast_') and k != 'forecast_next':
+                fc_next = v
+                break
+
+    if hist_data:
+        fc_header = ['年份', '营业收入', '净利润']
+        fc_rows = [fc_header]
+        for row in hist_data:
+            fc_rows.append([row.get('year', ''), row.get('revenue', 'N/A'), row.get('net_profit', 'N/A')])
+        if fc_next and fc_next.get('value') and fc_next.get('value') != '数据不足':
+            fc_rows.append([fc_next.get('year', '下一年E'), '—', f"{fc_next['value']}（预测）"])
+
+        t_fc = make_table(fc_rows, col_widths=[page_width*0.25, page_width*0.35, page_width*0.40])
+        if t_fc:
+            story.append(t_fc)
+
+        if fc_next and fc_next.get('method'):
+            story.append(Spacer(1, 4))
+            story.append(Paragraph(f"预测方法：{fc_next['method']}", styles['source_note']))
+        if fc_next and fc_next.get('growth_rate'):
+            story.append(Paragraph(f"保守增速：{fc_next['growth_rate']}", styles['source_note']))
+    else:
+        story.append(Paragraph('暂无历史财务数据，无法生成利润预测', styles['body']))
+
+    story.append(Paragraph('来源：新浪财经API历史年报 + 增速外推法', styles['source_note']))
+
     # ==================== 估值分析图 ====================
     story.append(Spacer(1, 8))
     story.append(Paragraph('第九章　目标价来源依据', styles['chapter_title']))

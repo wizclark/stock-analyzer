@@ -536,12 +536,23 @@ function renderPeers(ch7) {
 function renderForecast(ch8) {
     const hist = ch8.historical_profit || [];
     const forecast = ch8.prediction || {};
-    const fc26 = forecast.forecast_2026e || {};
+
+    // 动态查找预测数据：优先 forecast_next，其次 forecast_XXXXe
+    let fc = forecast.forecast_next || null;
+    if (!fc) {
+        for (const key of Object.keys(forecast)) {
+            if (key.startsWith('forecast_') && key !== 'forecast_next') {
+                fc = forecast[key];
+                break;
+            }
+        }
+    }
 
     const histRows = (forecast.historical || []).map((row, i) => {
-        const rev = hist[i] ? hist[i] : {};
         return `<tr><td>${row.year || ''}</td><td>${row.revenue || 'N/A'}</td><td>${row.net_profit || 'N/A'}</td></tr>`;
     }).join('');
+
+    const forecastRow = fc && fc.value ? `<tr style="background:#e8f2ff"><td>${fc.year || '下一年E'}</td><td>—</td><td><strong>${fc.value}</strong></td></tr>` : '';
 
     return `
     <div class="section-card">
@@ -550,12 +561,13 @@ function renderForecast(ch8) {
             <span class="section-card-badge">${ch8.forecast_method || ''}</span>
         </div>
         <div class="section-card-body">
-            <table class="data-table">
+            ${histRows || forecastRow ? `<table class="data-table">
                 <tr><th>年份</th><th>营业收入</th><th>净利润</th></tr>
-                ${histRows || '<tr><td colspan="3" style="text-align:center;color:#8e8e93">历史数据获取中</td></tr>'}
-                ${fc26.value ? `<tr style="background:#e8f2ff"><td>2026E（预测）</td><td>—</td><td><strong>${fc26.value}</strong></td></tr>` : ''}
-            </table>
-            ${fc26.method ? `<p class="text-sm" style="margin-top:8px">预测方法：${fc26.method}</p>` : ''}
+                ${histRows}
+                ${forecastRow}
+            </table>` : '<p style="text-align:center;color:#8e8e93;padding:16px">暂无历史财务数据，无法生成利润预测</p>'}
+            ${fc && fc.method ? `<p class="text-sm" style="margin-top:8px">预测方法：${fc.method}</p>` : ''}
+            ${fc && fc.growth_rate ? `<p class="text-sm">保守增速：${fc.growth_rate}</p>` : ''}
             <div class="source-note">来源：新浪财经API历史年报 + 增速外推法</div>
         </div>
     </div>

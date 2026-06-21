@@ -1364,24 +1364,73 @@ def calculate_total_score(pe, pb, rev_cagr, profit_cagr):
 
 
 def predict_profit(fin_summary):
-    """利润预测"""
-    profits = [item['value'] for item in fin_summary['net_profit']]
-    revenues = [item['value'] for item in fin_summary['revenue']]
+    """利润预测 - 修复版：正确提取年份 + 动态预测年份 + 多年增速加权"""
+    np_items = fin_summary.get('net_profit', [])
+    rev_items = fin_summary.get('revenue', [])
 
     result = {'historical': []}
-    for p, r in zip(profits, revenues):
+
+    # 1. 构建历史数据表（使用真实年份）
+    for i in range(min(len(np_items), len(rev_items))):
+        year = np_items[i].get('year', '') or rev_items[i].get('year', '')
+        p_val = np_items[i].get('value', 0)
+        r_val = rev_items[i].get('value', 0)
         result['historical'].append({
-            'year': '年份',
-            'revenue': f'{r:.2f}亿',
-            'net_profit': f'{p:.2f}亿',
+            'year': str(year) if year else f'第{i+1}年',
+            'revenue': f'{r_val:.2f}亿' if r_val else 'N/A',
+            'net_profit': f'{p_val:.2f}亿' if p_val else 'N/A',
         })
 
+    # 2. 预测下一年
+    profits = [item['value'] for item in np_items if item.get('value') is not None]
     if len(profits) >= 2:
-        growth = (profits[-1] - profits[-2]) / abs(profits[-2]) * 100 if profits[-2] != 0 else 0
-        next_year = profits[-1] * (1 + growth / 200)  # 增速减半保守估计
-        result['forecast_2026e'] = {
-            'value': f'{next_year:.2f}亿',
-            'method': f'基于近两年增速{growth:.1f}%，给予50%折扣率保守估计',
+        # 取最近两年的增速
+        if profits[-2] != 0:
+            recent_growth = (profits[-1] - profits[-2]) / abs(profits[-2]) * 100
+        else:
+            recent_growth = 0
+
+        # 如果有3年以上数据，也计算CAGR作为参考
+        if len(profits) >= 3 and profits[0] != 0:
+            years_span = len(profits) - 1
+            cagr = (pow(profits[-1] / profits[0], 1 / years_span) - 1) * 100
+            # 取CAGR和近一年增速的加权平均（CAGR权重40%）
+            blended_growth = cagr * 0.4 + recent_growth * 0.6
+            method_note = f'基于CAGR({cagr:.1f}%)与近一年增速({recent_growth:.1f}%)加权平均，给予50%折扣率保守估计'
+        else:
+            blended_growth = recent_growth
+            method_note = f'基于近两年增速{recent_growth:.1f}%，给予50%折扣率保守估计'
+
+        # 增速减半保守估计
+        conservative_growth = blended_growth / 2
+        next_profit = profits[-1] * (1 + conservative_growth / 100)
+
+        # 动态计算预测年份
+        last_year_str = ''
+        for item in np_items:
+            y = item.get('year', '')
+            if y:
+                last_year_str = str(y)
+        if last_year_str and last_year_str.isdigit():
+            forecast_year = int(last_year_str) + 1
+            forecast_key = f'forecast_{forecast_year}e'
+        else:
+            forecast_year = datetime.now().year + 1
+            forecast_key = f'forecast_{forecast_year}e'
+
+        result[forecast_key] = {
+            'year': f'{forecast_year}E',
+            'value': f'{next_profit:.2f}亿',
+            'growth_rate': f'{conservative_growth:.1f}%',
+            'method': method_note,
+        }
+        # 同时保留通用key，方便前端读取
+        result['forecast_next'] = result[forecast_key]
+    else:
+        result['forecast_next'] = {
+            'year': 'N/A',
+            'value': '数据不足',
+            'method': '历史数据不足2年，无法进行利润预测',
         }
 
     return result
