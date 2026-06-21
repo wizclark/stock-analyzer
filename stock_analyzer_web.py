@@ -738,13 +738,13 @@ def get_default_pe_by_industry(industry):
 
 def fetch_analyst_target_price(code):
     """
-    获取分析师目标价 — 从东方财富研报API（仅最近6个月）
+    获取分析师目标价 — 从东方财富研报API（仅最近12个月/近一年）
     返回：{'source': ..., 'targets': [...], 'avg_target': ..., 'max_target': ..., 'min_target': ...} 或 None
     """
     from datetime import datetime, timedelta
     results = []
     now = datetime.now()
-    six_months_ago = now - timedelta(days=180)
+    six_months_ago = now - timedelta(days=365)
     begin_date = six_months_ago.strftime('%Y-%m-%d')
     end_date = now.strftime('%Y-%m-%d')
 
@@ -788,7 +788,7 @@ def fetch_analyst_target_price(code):
     if results:
         prices = [t['target_price'] for t in results]
         return {
-            'source': '东方财富研报(近6个月) + IMA知识库',
+            'source': '东方财富研报(近一年) + IMA知识库',
             'targets': results[:10],
             'count': len(results),
             'avg_target': round(sum(prices) / len(prices), 2),
